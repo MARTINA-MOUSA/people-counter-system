@@ -168,18 +168,52 @@ with st.sidebar:
 # Main content - Single page for upload and processing
 st.header("📹 رفع ومعالجة الفيديو")
 
+# Save uploaded file to session state to prevent it from disappearing on rerun
 uploaded_file = st.file_uploader(
     "اختر ملف فيديو",
     type=['mp4', 'avi', 'mov', 'mkv'],
-    help="Upload a video file to process"
+    help="Upload a video file to process",
+    key="video_uploader"
 )
 
+# Store file in session state when uploaded
 if uploaded_file is not None:
+    # Save file info and bytes to session state
+    uploaded_file.seek(0)
+    file_bytes = uploaded_file.read()
+    uploaded_file.seek(0)  # Reset for later use
+    
+    st.session_state.uploaded_file_info = {
+        'name': uploaded_file.name,
+        'size': uploaded_file.size,
+        'type': uploaded_file.type,
+        'bytes': file_bytes
+    }
+
+# Use file from session state if available
+if uploaded_file is not None or 'uploaded_file_info' in st.session_state:
+    # Get file info
+    if uploaded_file is not None:
+        file_name = uploaded_file.name
+        file_size = uploaded_file.size
+        # Use bytes from session state if available, otherwise read from uploaded file
+        if 'uploaded_file_info' in st.session_state and st.session_state.uploaded_file_info.get('name') == file_name:
+            file_bytes = st.session_state.uploaded_file_info['bytes']
+        else:
+            uploaded_file.seek(0)
+            file_bytes = uploaded_file.read()
+            uploaded_file.seek(0)
+    else:
+        # Use saved file from session state
+        file_name = st.session_state.uploaded_file_info['name']
+        file_size = st.session_state.uploaded_file_info['size']
+        file_bytes = st.session_state.uploaded_file_info['bytes']
+    
     # Display video info
-    st.info(f"📁 الملف: {uploaded_file.name} | الحجم: {uploaded_file.size / (1024*1024):.2f} MB")
+    st.info(f"📁 الملف: {file_name} | الحجم: {file_size / (1024*1024):.2f} MB")
     
     # Process button
-    if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True):
+    if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
         try:
             # Prepare config
             config = {
@@ -196,9 +230,11 @@ if uploaded_file is not None:
             api_url = st.session_state.get('api_base_url', API_BASE_URL)
             
             with st.spinner("⏳ جاري معالجة الفيديو... قد يستغرق هذا بعض الوقت"):
-                # Reset file pointer
-                uploaded_file.seek(0)
-                files = {"file": (uploaded_file.name, uploaded_file.read(), uploaded_file.type)}
+                # Get file type
+                file_type = st.session_state.uploaded_file_info.get('type', 'video/mp4') if 'uploaded_file_info' in st.session_state else (uploaded_file.type if uploaded_file is not None else 'video/mp4')
+                
+                # Use file bytes (from upload or session state)
+                files = {"file": (file_name, file_bytes, file_type)}
                 data = {"config": json.dumps(config)}
                 
                 response = requests.post(
@@ -212,11 +248,14 @@ if uploaded_file is not None:
                 result = response.json()
                 st.session_state.processing_result = result
                 st.success("✅ تمت المعالجة بنجاح!")
+                st.rerun()  # Refresh to show results
             else:
                 st.error(f"❌ خطأ في المعالجة: {response.text}")
                 
         except Exception as e:
             st.error(f"❌ خطأ: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 # Display results if available
 if "processing_result" in st.session_state:
