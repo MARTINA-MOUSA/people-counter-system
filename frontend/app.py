@@ -230,73 +230,96 @@ try:
         # Display video info
         st.info(f"📁 الملف: {file_name} | الحجم: {file_size / (1024*1024):.2f} MB")
         
-        # Process button (only show if file is available)
+        # Process button (only show if file is available and not already processed)
         if uploaded_file is not None:
-            if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
-                try:
-                    # Read file bytes only when processing (not before)
-                    uploaded_file.seek(0)
-                    file_bytes = uploaded_file.read()
-                    uploaded_file.seek(0)  # Reset for potential reuse
+            # Check if already processed
+            if st.session_state.get("processing_complete", False):
+                st.success("✅ تمت معالجة هذا الملف مسبقاً. النتائج معروضة أدناه.")
+                if st.button("🔄 إعادة المعالجة", use_container_width=True, key="reprocess_button"):
+                    # Reset processing state
+                    st.session_state.processing_complete = False
+                    if "processing_result" in st.session_state:
+                        del st.session_state.processing_result
+                    st.rerun()
+            else:
+                if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
+                    # Set processing state to prevent multiple clicks
+                    st.session_state.processing = True
                     
-                    # Prepare config
-                    config = {
-                        "model": model,
-                        "conf_threshold": conf_threshold,
-                        "line_orientation": line_orientation,
-                        "line_position": line_position,
-                        "debug": debug,
-                        "skip_frames": skip_frames,
-                        "resize_factor": resize_factor
-                    }
-                    
-                    # Process video directly
-                    api_url = st.session_state.get('api_base_url', API_BASE_URL)
-                    
-                    with st.spinner("⏳ جاري معالجة الفيديو... قد يستغرق هذا بعض الوقت"):
-                        # Use file bytes
-                        files = {"file": (file_name, file_bytes, file_type)}
-                        data = {"config": json.dumps(config)}
+                    try:
+                        # Read file bytes only when processing (not before)
+                        uploaded_file.seek(0)
+                        file_bytes = uploaded_file.read()
+                        uploaded_file.seek(0)  # Reset for potential reuse
                         
-                        response = requests.post(
-                            f"{api_url}/api/process-direct",
-                            files=files,
-                            data=data,
-                            timeout=600  # 10 minutes timeout
-                        )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        st.session_state.processing_result = result
-                        st.success("✅ تمت المعالجة بنجاح!")
-                        st.rerun()  # Refresh to show results
-                    else:
-                        st.error(f"❌ خطأ في المعالجة: {response.text}")
-                        try:
-                            error_detail = response.json()
-                            st.json(error_detail)
-                        except:
-                            pass
+                        # Prepare config
+                        config = {
+                            "model": model,
+                            "conf_threshold": conf_threshold,
+                            "line_orientation": line_orientation,
+                            "line_position": line_position,
+                            "debug": debug,
+                            "skip_frames": skip_frames,
+                            "resize_factor": resize_factor
+                        }
                         
-                except requests.exceptions.Timeout:
-                    st.error("❌ انتهت مهلة الاتصال. الملف كبير جداً أو الخادم بطيء.")
-                    st.info("💡 جرب تقليل حجم الفيديو أو زيادة إعدادات Skip Frames في Sidebar")
-                except requests.exceptions.ConnectionError:
-                    st.error("❌ لا يمكن الاتصال بالخادم. تأكد من أن Backend يعمل.")
-                    st.info("💡 على Streamlit Cloud، انتظر قليلاً ثم أعد تحميل الصفحة")
-                except Exception as e:
-                    st.error(f"❌ خطأ: {str(e)}")
-                    import traceback
-                    with st.expander("🔍 تفاصيل الخطأ"):
-                        st.code(traceback.format_exc())
+                        # Process video directly
+                        api_url = st.session_state.get('api_base_url', API_BASE_URL)
+                        
+                        with st.spinner("⏳ جاري معالجة الفيديو... قد يستغرق هذا بعض الوقت"):
+                            # Use file bytes
+                            files = {"file": (file_name, file_bytes, file_type)}
+                            data = {"config": json.dumps(config)}
+                            
+                            response = requests.post(
+                                f"{api_url}/api/process-direct",
+                                files=files,
+                                data=data,
+                                timeout=600  # 10 minutes timeout
+                            )
+                        
+                        # Clear processing state
+                        st.session_state.processing = False
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            st.session_state.processing_result = result
+                            st.session_state.processing_complete = True
+                            st.session_state.processed_file_name = file_name  # Save file name
+                            st.success("✅ تمت المعالجة بنجاح!")
+                            # Don't use st.rerun() - it causes page reload and video disappears
+                            # Results will be displayed below automatically
+                        else:
+                            st.error(f"❌ خطأ في المعالجة: {response.text}")
+                            try:
+                                error_detail = response.json()
+                                st.json(error_detail)
+                            except:
+                                pass
+                            
+                    except requests.exceptions.Timeout:
+                        st.session_state.processing = False
+                        st.error("❌ انتهت مهلة الاتصال. الملف كبير جداً أو الخادم بطيء.")
+                        st.info("💡 جرب تقليل حجم الفيديو أو زيادة إعدادات Skip Frames في Sidebar")
+                    except requests.exceptions.ConnectionError:
+                        st.session_state.processing = False
+                        st.error("❌ لا يمكن الاتصال بالخادم. تأكد من أن Backend يعمل.")
+                        st.info("💡 على Streamlit Cloud، انتظر قليلاً ثم أعد تحميل الصفحة")
+                    except Exception as e:
+                        st.session_state.processing = False
+                        st.error(f"❌ خطأ: {str(e)}")
+                        import traceback
+                        with st.expander("🔍 تفاصيل الخطأ"):
+                            st.code(traceback.format_exc())
 except Exception as e:
     st.error(f"❌ خطأ في معالجة الملف: {str(e)}")
     import traceback
     with st.expander("🔍 تفاصيل الخطأ"):
         st.code(traceback.format_exc())
 
-# Display results if available
-if "processing_result" in st.session_state:
+# Display results if available (without rerun to prevent video disappearing)
+# Only show results if processing is complete
+if "processing_result" in st.session_state and st.session_state.get("processing_complete", False):
     result = st.session_state.processing_result
     
     st.markdown("---")
@@ -382,9 +405,12 @@ if "processing_result" in st.session_state:
             st.line_chart(chart_data.pivot(index='timestamp', columns='direction', values='count'), use_container_width=True)
     
     # Clear results button
-    if st.button("🗑️ مسح النتائج", use_container_width=True):
+    if st.button("🗑️ مسح النتائج", use_container_width=True, key="clear_results"):
         if "processing_result" in st.session_state:
             del st.session_state.processing_result
+        if "processing_complete" in st.session_state:
+            del st.session_state.processing_complete
+        # Use st.rerun() only when clearing, not when processing
         st.rerun()
 
 # Footer
