@@ -4,7 +4,7 @@ Utility functions for the people counter system.
 
 import cv2
 import numpy as np
-from typing import Tuple, List, Optional
+from typing import Tuple, Optional
 import time
 
 
@@ -286,27 +286,4 @@ class FPSCounter:
         self.frame_count = 0
         self.start_time = time.time()
         self.fps = 0.0
-
-
-def get_video_info(video_path: str) -> Tuple[int, int, int, float]:
-    """
-    Get video information.
-    
-    Args:
-        video_path: Path to video file
-        
-    Returns:
-        Tuple of (width, height, total_frames, fps)
-    """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"Cannot open video: {video_path}")
-    
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
-    cap.release()
-    return width, height, total_frames, fps
 

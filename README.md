@@ -44,8 +44,7 @@ people-counter-system/
 ├── frontend/
 │   ├── __init__.py
 │   └── app.py          # Streamlit web interface
-├── run_backend.py       # Backend launcher
-├── run_frontend.py      # Frontend launcher
+├── streamlit_app.py    # Cloud entry point (runs both backend & frontend)
 ├── requirements.txt     # Dependencies
 └── README.md           # This file
 ```
@@ -86,15 +85,17 @@ pip install -r requirements.txt
 
 ### Option 1: Web Interface (Recommended) 🌐
 
+**For Local Development:**
+
 **Step 1: Start Backend API**
 ```bash
-python run_backend.py
+uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload
 ```
 The API will be available at: http://localhost:8000
 
 **Step 2: Start Frontend (in a new terminal)**
 ```bash
-python run_frontend.py
+streamlit run frontend/app.py --server.port 8501 --server.address localhost
 ```
 The web interface will open at: http://localhost:8501
 
@@ -104,6 +105,9 @@ The web interface will open at: http://localhost:8501
 3. Upload a video file
 4. Click "🚀 بدء المعالجة" (Start Processing)
 5. View results, statistics, and download files directly in the browser
+
+**For Streamlit Cloud:**
+The `streamlit_app.py` file automatically starts both backend and frontend in the same process.
 
 ### Option 2: Command Line Interface (CLI) 💻
 
@@ -319,11 +323,11 @@ pip install -r requirements.txt
 
 ### 2. Run Web Interface
 ```bash
-# Terminal 1
-python run_backend.py
+# Terminal 1 - Start Backend
+uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload
 
-# Terminal 2
-python run_frontend.py
+# Terminal 2 - Start Frontend
+streamlit run frontend/app.py --server.port 8501 --server.address localhost
 ```
 
 ### 3. Open Browser

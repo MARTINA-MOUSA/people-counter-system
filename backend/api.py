@@ -3,7 +3,7 @@ FastAPI Backend for People Counter System
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -12,11 +12,9 @@ import os
 import json
 import uuid
 from datetime import datetime
-import asyncio
 from pathlib import Path
-
 import sys
-from pathlib import Path
+import csv
 
 # Add parent directory to path
 backend_dir = Path(__file__).parent
@@ -203,7 +201,6 @@ def process_video(job_id: str, video_path: str, config: ProcessingConfig):
         history = counter.get_history()
         results_path = RESULTS_DIR / f"{job_id}_results.csv"
         if history:
-            import csv
             with open(results_path, 'w', newline='', encoding='utf-8') as f:
                 fieldnames = ['timestamp', 'track_id', 'direction', 'total_enter', 'total_exit']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -428,7 +425,6 @@ async def process_video_sync(job_id: str, video_path: str, config: ProcessingCon
         history = counter.get_history()
         results_path = RESULTS_DIR / f"{job_id}_results.csv"
         if history:
-            import csv
             with open(results_path, 'w', newline='', encoding='utf-8') as f:
                 fieldnames = ['timestamp', 'track_id', 'direction', 'total_enter', 'total_exit']
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -501,7 +497,6 @@ async def download_results(job_id: str):
     if not csv_path:
         # Create empty CSV if no results
         csv_path = RESULTS_DIR / f"{job_id}_results.csv"
-        import csv
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             fieldnames = ['timestamp', 'track_id', 'direction', 'total_enter', 'total_exit']
             writer = csv.DictWriter(f, fieldnames=fieldnames)

@@ -3,8 +3,7 @@ Line Crossing and Counting Module
 Handles virtual counting line and entry/exit counting logic.
 """
 
-from typing import Tuple, List, Dict, Set
-from collections import defaultdict
+from typing import Tuple, List, Dict
 import numpy as np
 
 

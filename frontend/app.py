@@ -12,16 +12,15 @@ import pandas as pd
 
 # API Configuration
 import os
-API_PORT = os.getenv("API_PORT", "8000")
+API_PORT = os.getenv("API_PORT", os.getenv("BACKEND_PORT", "8000"))
 
-# For Streamlit Cloud, use environment variable or default
-# If running locally, use localhost. If on cloud, you may need to set API_BASE_URL
-API_BASE_URL = os.getenv("API_BASE_URL", f"http://localhost:{API_PORT}")
+# For Streamlit Cloud, backend runs in same process on localhost
+# For local development, also use localhost
+API_BASE_URL = os.getenv("API_BASE_URL", f"http://127.0.0.1:{API_PORT}")
 
-# Check if we're on Streamlit Cloud
+# On Streamlit Cloud, backend is integrated and runs automatically
 if os.getenv("STREAMLIT_SERVER_PORT"):
-    # On Streamlit Cloud, backend might be on different URL
-    # You can set API_BASE_URL environment variable in Streamlit Cloud settings
+    # Backend is started automatically in streamlit_app.py
     pass
 
 # Page configuration
@@ -132,14 +131,38 @@ with st.sidebar:
     
     # Check API connection
     try:
-        response = requests.get(f"{api_url}/", timeout=2)
+        response = requests.get(f"{api_url}/", timeout=3)
         if response.status_code == 200:
             st.success(f"✅ API Connected on port {custom_port}")
+            st.session_state.api_connected = True
         else:
             st.error("❌ API Error")
-    except:
-        st.error(f"❌ API Not Available on port {custom_port}")
-        st.info("Please start the backend API server first:\n```bash\npython run_backend.py\n```\nOr if using different port:\n```bash\npython run_backend.py --port 8001\n```")
+            st.session_state.api_connected = False
+    except Exception as e:
+        st.session_state.api_connected = False
+        
+        # Check if we're on Streamlit Cloud (backend should auto-start)
+        if os.getenv("STREAMLIT_SERVER_PORT"):
+            st.warning(f"⏳ Backend is starting... Please wait a moment and refresh.")
+            st.info("""
+            **Note:** On Streamlit Cloud, the backend starts automatically.
+            If this message persists, the backend may need a moment to initialize.
+            """)
+        else:
+            # Local development
+            st.error(f"❌ API Not Available on port {custom_port}")
+            st.info("""
+            **To start the backend API locally:**
+            
+            ```bash
+            uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload
+            ```
+            
+            Or if port 8000 is busy:
+            ```bash
+            uvicorn backend.api:app --host 127.0.0.1 --port 8001 --reload
+            ```
+            """)
 
 # Main content - Single page for upload and processing
 st.header("📹 رفع ومعالجة الفيديو")
@@ -285,205 +308,6 @@ if "processing_result" in st.session_state:
         if "processing_result" in st.session_state:
             del st.session_state.processing_result
         st.rerun()
-
-# Keep old tabs for backward compatibility
-tab1, tab2, tab3 = st.tabs(["📹 Upload & Process (Old)", "📊 Job Status", "📈 Results"])
-
-with tab1:
-    st.info("استخدم الواجهة الرئيسية أعلاه للمعالجة المباشرة")
-
-with tab2:
-    st.header("Job Status")
-    
-    # Get job ID
-    if "current_job_id" in st.session_state:
-        job_id = st.text_input("Job ID", value=st.session_state.current_job_id)
-    else:
-        job_id = st.text_input("Job ID", placeholder="Enter job ID or select from list")
-    
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        if st.button("🔍 Check Status", type="primary"):
-            if job_id:
-                try:
-                    api_url = st.session_state.get('api_base_url', API_BASE_URL)
-                    response = requests.get(f"{api_url}/api/status/{job_id}", timeout=5)
-                    if response.status_code == 200:
-                        status = response.json()
-                        st.session_state.current_status = status
-                    else:
-                        st.error(f"Job not found: {response.text}")
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-            else:
-                st.warning("Please enter a job ID")
-    
-    with col2:
-        if st.button("📋 List All Jobs"):
-            try:
-                api_url = st.session_state.get('api_base_url', API_BASE_URL)
-                response = requests.get(f"{api_url}/api/jobs", timeout=5)
-                if response.status_code == 200:
-                    jobs = response.json()["jobs"]
-                    if jobs:
-                        st.session_state.jobs_list = jobs
-                    else:
-                        st.info("No jobs found")
-                else:
-                    st.error("Error fetching jobs")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-    
-    # Display jobs list
-    if "jobs_list" in st.session_state:
-        st.subheader("All Jobs")
-        jobs_df = pd.DataFrame(st.session_state.jobs_list)
-        st.dataframe(jobs_df, use_container_width=True)
-    
-    # Display current status
-    if "current_status" in st.session_state:
-        status = st.session_state.current_status
-        
-        st.markdown("---")
-        st.subheader("Current Job Status")
-        
-        # Status indicator
-        if status["status"] == "completed":
-            st.success(f"✅ Status: {status['status'].upper()}")
-        elif status["status"] == "processing":
-            st.info(f"🔄 Status: {status['status'].upper()}")
-        elif status["status"] == "error":
-            st.error(f"❌ Status: {status['status'].upper()}")
-        else:
-            st.warning(f"⏳ Status: {status['status'].upper()}")
-        
-        # Progress bar
-        if status["status"] == "processing":
-            st.progress(status["progress"] / 100)
-            st.caption(f"Progress: {status['progress']:.1f}%")
-        
-        # Statistics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Entered", status["total_enter"])
-        
-        with col2:
-            st.metric("Exited", status["total_exit"])
-        
-        with col3:
-            st.metric("Current Occupancy", status["current_occupancy"])
-        
-        # Message
-        if status.get("message"):
-            st.info(f"ℹ️ {status['message']}")
-        
-        # Download buttons
-        if status["status"] == "completed":
-            st.markdown("---")
-            st.subheader("Download Results")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("📥 Download Video", use_container_width=True):
-                    try:
-                        api_url = st.session_state.get('api_base_url', API_BASE_URL)
-                        response = requests.get(
-                            f"{api_url}/api/download/{job_id}/video",
-                            timeout=300,
-                            stream=True
-                        )
-                        if response.status_code == 200:
-                            st.download_button(
-                                label="⬇️ Click to Download Video",
-                                data=response.content,
-                                file_name=f"{job_id}_output.mp4",
-                                mime="video/mp4",
-                                use_container_width=True
-                            )
-                        else:
-                            st.error("Error downloading video")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
-            
-            with col2:
-                if st.button("📊 Download CSV Results", use_container_width=True):
-                    try:
-                        api_url = st.session_state.get('api_base_url', API_BASE_URL)
-                        response = requests.get(
-                            f"{api_url}/api/download/{job_id}/results",
-                            timeout=30
-                        )
-                        if response.status_code == 200:
-                            st.download_button(
-                                label="⬇️ Click to Download CSV",
-                                data=response.content,
-                                file_name=f"{job_id}_results.csv",
-                                mime="text/csv",
-                                use_container_width=True
-                            )
-                        else:
-                            st.error("Error downloading results")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
-        
-        # Auto-refresh for processing jobs
-        if status["status"] == "processing":
-            time.sleep(2)
-            st.rerun()
-
-with tab3:
-    st.header("Results Analysis")
-    
-    if "current_job_id" in st.session_state:
-        job_id = st.session_state.current_job_id
-        
-        # Try to load results
-        try:
-            api_url = st.session_state.get('api_base_url', API_BASE_URL)
-            response = requests.get(
-                f"{api_url}/api/download/{job_id}/results",
-                timeout=30
-            )
-            if response.status_code == 200:
-                # Parse CSV
-                from io import StringIO
-                csv_data = StringIO(response.text)
-                df = pd.read_csv(csv_data)
-                
-                st.subheader("Counting Events")
-                st.dataframe(df, use_container_width=True)
-                
-                # Statistics
-                st.subheader("Statistics")
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Total Entered", len(df[df['direction'] == 'enter']))
-                
-                with col2:
-                    st.metric("Total Exited", len(df[df['direction'] == 'exit']))
-                
-                with col3:
-                    st.metric("Unique Tracks", df['track_id'].nunique())
-                
-                with col4:
-                    st.metric("Total Events", len(df))
-                
-                # Charts
-                if len(df) > 0:
-                    st.subheader("Timeline")
-                    df['timestamp'] = pd.to_numeric(df['timestamp'])
-                    chart_data = df.groupby(['timestamp', 'direction']).size().reset_index(name='count')
-                    st.line_chart(chart_data.pivot(index='timestamp', columns='direction', values='count'), use_container_width=True)
-            else:
-                st.info("No results available yet. Please process a video first.")
-        except Exception as e:
-            st.info("No results available yet. Please process a video first.")
-    else:
-        st.info("Please upload and process a video first.")
 
 # Footer
 st.markdown("---")
