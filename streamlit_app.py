@@ -55,15 +55,27 @@ def start_backend():
                 print(f"✅ Backend API started successfully on port {BACKEND_PORT}")
             else:
                 print(f"⚠️ Backend started but health check failed")
-        except Exception:
-            print(f"⚠️ Backend may still be starting...")
+        except Exception as e:
+            print(f"⚠️ Backend may still be starting... Error: {e}")
         
     except Exception as e:
         print(f"⚠️ Could not start backend: {e}")
+        import traceback
+        traceback.print_exc()
         print("Frontend will still work but API features may not be available.")
 
-# Start backend automatically
-start_backend()
+# Start backend automatically (only if not already started)
+if not BACKEND_STARTED:
+    start_backend()
 
 # Import and run the frontend app
-import frontend.app
+# Note: frontend.app must be imported last as it contains Streamlit code that runs on import
+try:
+    import frontend.app
+except Exception as e:
+    # Fallback: show error message if import fails
+    import streamlit as st
+    st.error(f"❌ Error loading application: {e}")
+    import traceback
+    st.code(traceback.format_exc())
+    st.info("Please check the deployment logs for more details.")

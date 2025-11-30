@@ -122,8 +122,9 @@ with st.sidebar:
     
     # API Port Configuration
     st.markdown("#### 🔌 API Settings")
-    custom_port = st.text_input("API Port", value=API_PORT, key="api_port", help="Change if backend is on different port")
-    api_url = f"http://localhost:{custom_port}" if custom_port else API_BASE_URL
+    custom_port = st.text_input("API Port", value=str(API_PORT), key="api_port", help="Change if backend is on different port")
+    # Use 127.0.0.1 for localhost connections
+    api_url = f"http://127.0.0.1:{custom_port}" if custom_port else API_BASE_URL
     
     # Update session state
     if 'api_base_url' not in st.session_state:
