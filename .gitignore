@@ -34,7 +34,7 @@ ENV/
 *~
 
 # Model weights (will be downloaded automatically)
-*.pt
+
 *.pth
 *.onnx
 
