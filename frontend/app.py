@@ -176,7 +176,8 @@ uploaded_file = st.file_uploader(
     key="video_uploader"
 )
 
-# Store file in session state when uploaded
+# Store file info (not bytes) in session state when uploaded
+# Note: We don't save file bytes to session_state to avoid memory issues
 if uploaded_file is not None:
     try:
         # Check file size (limit to 500MB to prevent memory issues)
@@ -185,120 +186,114 @@ if uploaded_file is not None:
         
         if uploaded_file.size > max_size_bytes:
             st.error(f"❌ حجم الملف كبير جداً ({uploaded_file.size / (1024*1024):.2f} MB). الحد الأقصى: {max_size_mb} MB")
+            # Clear any previous file info
+            if 'uploaded_file_info' in st.session_state:
+                del st.session_state.uploaded_file_info
         else:
-            # Save file info and bytes to session state
-            uploaded_file.seek(0)
-            file_bytes = uploaded_file.read()
-            uploaded_file.seek(0)  # Reset for later use
-            
+            # Save only file info (not bytes) to session state
             st.session_state.uploaded_file_info = {
                 'name': uploaded_file.name,
                 'size': uploaded_file.size,
-                'type': uploaded_file.type,
-                'bytes': file_bytes
+                'type': uploaded_file.type
             }
     except Exception as e:
         st.error(f"❌ خطأ في قراءة الملف: {str(e)}")
         import traceback
-        st.code(traceback.format_exc())
+        with st.expander("🔍 تفاصيل الخطأ"):
+            st.code(traceback.format_exc())
 
-# Use file from session state if available
+# Use file if available
+file_bytes = None
+file_name = None
+file_size = None
+file_type = None
+
 try:
-    if uploaded_file is not None or 'uploaded_file_info' in st.session_state:
-        # Get file info
+    if uploaded_file is not None:
+        # File is currently uploaded - use it directly
+        file_name = uploaded_file.name
+        file_size = uploaded_file.size
+        file_type = uploaded_file.type
+        # Don't read bytes yet - we'll read them only when processing
+        file_available = True
+    elif 'uploaded_file_info' in st.session_state:
+        # File info is saved but file itself is not available (rerun happened)
+        file_name = st.session_state.uploaded_file_info.get('name')
+        file_size = st.session_state.uploaded_file_info.get('size')
+        file_type = st.session_state.uploaded_file_info.get('type', 'video/mp4')
+        file_available = False
+        st.warning("⚠️ الملف غير متاح. يرجى رفع الملف مرة أخرى.")
+    else:
+        file_available = False
+    
+    if file_available and file_name:
+        # Display video info
+        st.info(f"📁 الملف: {file_name} | الحجم: {file_size / (1024*1024):.2f} MB")
+        
+        # Process button (only show if file is available)
         if uploaded_file is not None:
-            file_name = uploaded_file.name
-            file_size = uploaded_file.size
-            # Use bytes from session state if available, otherwise read from uploaded file
-            if 'uploaded_file_info' in st.session_state and st.session_state.uploaded_file_info.get('name') == file_name:
-                file_bytes = st.session_state.uploaded_file_info['bytes']
-            else:
+            if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
                 try:
+                    # Read file bytes only when processing (not before)
                     uploaded_file.seek(0)
                     file_bytes = uploaded_file.read()
-                    uploaded_file.seek(0)
+                    uploaded_file.seek(0)  # Reset for potential reuse
+                    
+                    # Prepare config
+                    config = {
+                        "model": model,
+                        "conf_threshold": conf_threshold,
+                        "line_orientation": line_orientation,
+                        "line_position": line_position,
+                        "debug": debug,
+                        "skip_frames": skip_frames,
+                        "resize_factor": resize_factor
+                    }
+                    
+                    # Process video directly
+                    api_url = st.session_state.get('api_base_url', API_BASE_URL)
+                    
+                    with st.spinner("⏳ جاري معالجة الفيديو... قد يستغرق هذا بعض الوقت"):
+                        # Use file bytes
+                        files = {"file": (file_name, file_bytes, file_type)}
+                        data = {"config": json.dumps(config)}
+                        
+                        response = requests.post(
+                            f"{api_url}/api/process-direct",
+                            files=files,
+                            data=data,
+                            timeout=600  # 10 minutes timeout
+                        )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.session_state.processing_result = result
+                        st.success("✅ تمت المعالجة بنجاح!")
+                        st.rerun()  # Refresh to show results
+                    else:
+                        st.error(f"❌ خطأ في المعالجة: {response.text}")
+                        try:
+                            error_detail = response.json()
+                            st.json(error_detail)
+                        except:
+                            pass
+                        
+                except requests.exceptions.Timeout:
+                    st.error("❌ انتهت مهلة الاتصال. الملف كبير جداً أو الخادم بطيء.")
+                    st.info("💡 جرب تقليل حجم الفيديو أو زيادة إعدادات Skip Frames في Sidebar")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ لا يمكن الاتصال بالخادم. تأكد من أن Backend يعمل.")
+                    st.info("💡 على Streamlit Cloud، انتظر قليلاً ثم أعد تحميل الصفحة")
                 except Exception as e:
-                    st.error(f"❌ خطأ في قراءة الملف: {str(e)}")
-                    file_bytes = None
-        else:
-            # Use saved file from session state
-            if 'uploaded_file_info' not in st.session_state:
-                st.warning("⚠️ لم يتم العثور على الملف المحفوظ")
-            else:
-                file_name = st.session_state.uploaded_file_info['name']
-                file_size = st.session_state.uploaded_file_info['size']
-                file_bytes = st.session_state.uploaded_file_info.get('bytes')
-        
-        if file_bytes is not None:
-            # Display video info
-            st.info(f"📁 الملف: {file_name} | الحجم: {file_size / (1024*1024):.2f} MB")
-        else:
-            st.error("❌ لا يمكن قراءة الملف")
+                    st.error(f"❌ خطأ: {str(e)}")
+                    import traceback
+                    with st.expander("🔍 تفاصيل الخطأ"):
+                        st.code(traceback.format_exc())
 except Exception as e:
     st.error(f"❌ خطأ في معالجة الملف: {str(e)}")
     import traceback
-    st.code(traceback.format_exc())
-    file_bytes = None
-    file_name = None
-    file_size = None
-    
-    # Process button (only show if file is available)
-    if file_bytes is not None and file_name is not None:
-        if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
-            try:
-                # Prepare config
-                config = {
-                    "model": model,
-                    "conf_threshold": conf_threshold,
-                    "line_orientation": line_orientation,
-                    "line_position": line_position,
-                    "debug": debug,
-                    "skip_frames": skip_frames,
-                    "resize_factor": resize_factor
-                }
-                
-                # Process video directly
-                api_url = st.session_state.get('api_base_url', API_BASE_URL)
-                
-                with st.spinner("⏳ جاري معالجة الفيديو... قد يستغرق هذا بعض الوقت"):
-                    # Get file type
-                    file_type = st.session_state.uploaded_file_info.get('type', 'video/mp4') if 'uploaded_file_info' in st.session_state else (uploaded_file.type if uploaded_file is not None else 'video/mp4')
-                    
-                    # Use file bytes (from upload or session state)
-                    files = {"file": (file_name, file_bytes, file_type)}
-                    data = {"config": json.dumps(config)}
-                    
-                    response = requests.post(
-                        f"{api_url}/api/process-direct",
-                        files=files,
-                        data=data,
-                        timeout=600  # 10 minutes timeout
-                    )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    st.session_state.processing_result = result
-                    st.success("✅ تمت المعالجة بنجاح!")
-                    st.rerun()  # Refresh to show results
-                else:
-                    st.error(f"❌ خطأ في المعالجة: {response.text}")
-                    try:
-                        error_detail = response.json()
-                        st.json(error_detail)
-                    except:
-                        pass
-                    
-            except requests.exceptions.Timeout:
-                st.error("❌ انتهت مهلة الاتصال. الملف كبير جداً أو الخادم بطيء.")
-                st.info("💡 جرب تقليل حجم الفيديو أو زيادة إعدادات Skip Frames في Sidebar")
-            except requests.exceptions.ConnectionError:
-                st.error("❌ لا يمكن الاتصال بالخادم. تأكد من أن Backend يعمل.")
-                st.info("💡 على Streamlit Cloud، انتظر قليلاً ثم أعد تحميل الصفحة")
-            except Exception as e:
-                st.error(f"❌ خطأ: {str(e)}")
-                import traceback
-                with st.expander("🔍 تفاصيل الخطأ"):
-                    st.code(traceback.format_exc())
+    with st.expander("🔍 تفاصيل الخطأ"):
+        st.code(traceback.format_exc())
 
 # Display results if available
 if "processing_result" in st.session_state:
