@@ -178,43 +178,74 @@ uploaded_file = st.file_uploader(
 
 # Store file in session state when uploaded
 if uploaded_file is not None:
-    # Save file info and bytes to session state
-    uploaded_file.seek(0)
-    file_bytes = uploaded_file.read()
-    uploaded_file.seek(0)  # Reset for later use
-    
-    st.session_state.uploaded_file_info = {
-        'name': uploaded_file.name,
-        'size': uploaded_file.size,
-        'type': uploaded_file.type,
-        'bytes': file_bytes
-    }
-
-# Use file from session state if available
-if uploaded_file is not None or 'uploaded_file_info' in st.session_state:
-    # Get file info
-    if uploaded_file is not None:
-        file_name = uploaded_file.name
-        file_size = uploaded_file.size
-        # Use bytes from session state if available, otherwise read from uploaded file
-        if 'uploaded_file_info' in st.session_state and st.session_state.uploaded_file_info.get('name') == file_name:
-            file_bytes = st.session_state.uploaded_file_info['bytes']
+    try:
+        # Check file size (limit to 500MB to prevent memory issues)
+        max_size_mb = 500
+        max_size_bytes = max_size_mb * 1024 * 1024
+        
+        if uploaded_file.size > max_size_bytes:
+            st.error(f"❌ حجم الملف كبير جداً ({uploaded_file.size / (1024*1024):.2f} MB). الحد الأقصى: {max_size_mb} MB")
         else:
+            # Save file info and bytes to session state
             uploaded_file.seek(0)
             file_bytes = uploaded_file.read()
-            uploaded_file.seek(0)
-    else:
-        # Use saved file from session state
-        file_name = st.session_state.uploaded_file_info['name']
-        file_size = st.session_state.uploaded_file_info['size']
-        file_bytes = st.session_state.uploaded_file_info['bytes']
+            uploaded_file.seek(0)  # Reset for later use
+            
+            st.session_state.uploaded_file_info = {
+                'name': uploaded_file.name,
+                'size': uploaded_file.size,
+                'type': uploaded_file.type,
+                'bytes': file_bytes
+            }
+    except Exception as e:
+        st.error(f"❌ خطأ في قراءة الملف: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc())
+
+# Use file from session state if available
+try:
+    if uploaded_file is not None or 'uploaded_file_info' in st.session_state:
+        # Get file info
+        if uploaded_file is not None:
+            file_name = uploaded_file.name
+            file_size = uploaded_file.size
+            # Use bytes from session state if available, otherwise read from uploaded file
+            if 'uploaded_file_info' in st.session_state and st.session_state.uploaded_file_info.get('name') == file_name:
+                file_bytes = st.session_state.uploaded_file_info['bytes']
+            else:
+                try:
+                    uploaded_file.seek(0)
+                    file_bytes = uploaded_file.read()
+                    uploaded_file.seek(0)
+                except Exception as e:
+                    st.error(f"❌ خطأ في قراءة الملف: {str(e)}")
+                    file_bytes = None
+        else:
+            # Use saved file from session state
+            if 'uploaded_file_info' not in st.session_state:
+                st.warning("⚠️ لم يتم العثور على الملف المحفوظ")
+            else:
+                file_name = st.session_state.uploaded_file_info['name']
+                file_size = st.session_state.uploaded_file_info['size']
+                file_bytes = st.session_state.uploaded_file_info.get('bytes')
+        
+        if file_bytes is not None:
+            # Display video info
+            st.info(f"📁 الملف: {file_name} | الحجم: {file_size / (1024*1024):.2f} MB")
+        else:
+            st.error("❌ لا يمكن قراءة الملف")
+except Exception as e:
+    st.error(f"❌ خطأ في معالجة الملف: {str(e)}")
+    import traceback
+    st.code(traceback.format_exc())
+    file_bytes = None
+    file_name = None
+    file_size = None
     
-    # Display video info
-    st.info(f"📁 الملف: {file_name} | الحجم: {file_size / (1024*1024):.2f} MB")
-    
-    # Process button
-    if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
-        try:
+    # Process button (only show if file is available)
+    if file_bytes is not None and file_name is not None:
+        if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
+            try:
             # Prepare config
             config = {
                 "model": model,
@@ -251,11 +282,23 @@ if uploaded_file is not None or 'uploaded_file_info' in st.session_state:
                 st.rerun()  # Refresh to show results
             else:
                 st.error(f"❌ خطأ في المعالجة: {response.text}")
+                try:
+                    error_detail = response.json()
+                    st.json(error_detail)
+                except:
+                    pass
                 
+        except requests.exceptions.Timeout:
+            st.error("❌ انتهت مهلة الاتصال. الملف كبير جداً أو الخادم بطيء.")
+            st.info("💡 جرب تقليل حجم الفيديو أو زيادة إعدادات Skip Frames في Sidebar")
+        except requests.exceptions.ConnectionError:
+            st.error("❌ لا يمكن الاتصال بالخادم. تأكد من أن Backend يعمل.")
+            st.info("💡 على Streamlit Cloud، انتظر قليلاً ثم أعد تحميل الصفحة")
         except Exception as e:
             st.error(f"❌ خطأ: {str(e)}")
             import traceback
-            st.code(traceback.format_exc())
+            with st.expander("🔍 تفاصيل الخطأ"):
+                st.code(traceback.format_exc())
 
 # Display results if available
 if "processing_result" in st.session_state:
