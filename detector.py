@@ -20,7 +20,35 @@ class PersonDetector:
             model_path: Path to YOLOv8 model weights (will download if not exists)
             conf_threshold: Confidence threshold for detections
         """
-        self.model = YOLO(model_path)
+        # YOLO will automatically download the model if it doesn't exist
+        # On first run, it downloads from ultralytics.com
+        # The model is saved to ~/.ultralytics/weights/ or /tmp/Ultralytics/ on Streamlit Cloud
+        try:
+            self.model = YOLO(model_path)
+        except Exception as e:
+            # If model download fails, try to use a cached version or retry
+            import os
+            # Try to find model in common locations
+            possible_paths = [
+                model_path,
+                os.path.join(os.path.expanduser("~"), ".ultralytics", "weights", model_path),
+                os.path.join("/tmp", "Ultralytics", model_path),
+            ]
+            model_loaded = False
+            for path in possible_paths:
+                if os.path.exists(path):
+                    try:
+                        self.model = YOLO(path)
+                        model_loaded = True
+                        break
+                    except:
+                        continue
+            
+            if not model_loaded:
+                # Last attempt: let YOLO handle the download
+                print(f"⚠️ Warning: Could not load model from {model_path}, attempting automatic download...")
+                self.model = YOLO(model_path)
+        
         self.conf_threshold = conf_threshold
         # COCO class ID for person is 0
         self.person_class_id = 0
