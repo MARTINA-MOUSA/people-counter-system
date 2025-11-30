@@ -30,21 +30,33 @@ def start_backend():
         
         # Start server in background thread
         def run_server():
-            uvicorn.run(
-                app,
-                host="127.0.0.1",
-                port=BACKEND_PORT,
-                log_level="error"  # Reduce logs
-            )
+            try:
+                uvicorn.run(
+                    app,
+                    host="127.0.0.1",
+                    port=BACKEND_PORT,
+                    log_level="error"  # Reduce logs
+                )
+            except Exception as e:
+                print(f"⚠️ Backend server error: {e}")
         
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
         
-        # Wait a bit for server to start
-        time.sleep(2)
+        # Wait a bit for server to start and verify it's running
+        time.sleep(3)
         
-        BACKEND_STARTED = True
-        print(f"✅ Backend API started on port {BACKEND_PORT}")
+        # Verify backend is running
+        try:
+            import requests
+            response = requests.get(f"http://127.0.0.1:{BACKEND_PORT}/", timeout=2)
+            if response.status_code == 200:
+                BACKEND_STARTED = True
+                print(f"✅ Backend API started successfully on port {BACKEND_PORT}")
+            else:
+                print(f"⚠️ Backend started but health check failed")
+        except Exception:
+            print(f"⚠️ Backend may still be starting...")
         
     except Exception as e:
         print(f"⚠️ Could not start backend: {e}")
