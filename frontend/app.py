@@ -246,59 +246,59 @@ except Exception as e:
     if file_bytes is not None and file_name is not None:
         if st.button("🚀 بدء المعالجة", type="primary", use_container_width=True, key="process_button"):
             try:
-            # Prepare config
-            config = {
-                "model": model,
-                "conf_threshold": conf_threshold,
-                "line_orientation": line_orientation,
-                "line_position": line_position,
-                "debug": debug,
-                "skip_frames": skip_frames,
-                "resize_factor": resize_factor
-            }
-            
-            # Process video directly
-            api_url = st.session_state.get('api_base_url', API_BASE_URL)
-            
-            with st.spinner("⏳ جاري معالجة الفيديو... قد يستغرق هذا بعض الوقت"):
-                # Get file type
-                file_type = st.session_state.uploaded_file_info.get('type', 'video/mp4') if 'uploaded_file_info' in st.session_state else (uploaded_file.type if uploaded_file is not None else 'video/mp4')
+                # Prepare config
+                config = {
+                    "model": model,
+                    "conf_threshold": conf_threshold,
+                    "line_orientation": line_orientation,
+                    "line_position": line_position,
+                    "debug": debug,
+                    "skip_frames": skip_frames,
+                    "resize_factor": resize_factor
+                }
                 
-                # Use file bytes (from upload or session state)
-                files = {"file": (file_name, file_bytes, file_type)}
-                data = {"config": json.dumps(config)}
+                # Process video directly
+                api_url = st.session_state.get('api_base_url', API_BASE_URL)
                 
-                response = requests.post(
-                    f"{api_url}/api/process-direct",
-                    files=files,
-                    data=data,
-                    timeout=600  # 10 minutes timeout
-                )
-            
-            if response.status_code == 200:
-                result = response.json()
-                st.session_state.processing_result = result
-                st.success("✅ تمت المعالجة بنجاح!")
-                st.rerun()  # Refresh to show results
-            else:
-                st.error(f"❌ خطأ في المعالجة: {response.text}")
-                try:
-                    error_detail = response.json()
-                    st.json(error_detail)
-                except:
-                    pass
+                with st.spinner("⏳ جاري معالجة الفيديو... قد يستغرق هذا بعض الوقت"):
+                    # Get file type
+                    file_type = st.session_state.uploaded_file_info.get('type', 'video/mp4') if 'uploaded_file_info' in st.session_state else (uploaded_file.type if uploaded_file is not None else 'video/mp4')
+                    
+                    # Use file bytes (from upload or session state)
+                    files = {"file": (file_name, file_bytes, file_type)}
+                    data = {"config": json.dumps(config)}
+                    
+                    response = requests.post(
+                        f"{api_url}/api/process-direct",
+                        files=files,
+                        data=data,
+                        timeout=600  # 10 minutes timeout
+                    )
                 
-        except requests.exceptions.Timeout:
-            st.error("❌ انتهت مهلة الاتصال. الملف كبير جداً أو الخادم بطيء.")
-            st.info("💡 جرب تقليل حجم الفيديو أو زيادة إعدادات Skip Frames في Sidebar")
-        except requests.exceptions.ConnectionError:
-            st.error("❌ لا يمكن الاتصال بالخادم. تأكد من أن Backend يعمل.")
-            st.info("💡 على Streamlit Cloud، انتظر قليلاً ثم أعد تحميل الصفحة")
-        except Exception as e:
-            st.error(f"❌ خطأ: {str(e)}")
-            import traceback
-            with st.expander("🔍 تفاصيل الخطأ"):
-                st.code(traceback.format_exc())
+                if response.status_code == 200:
+                    result = response.json()
+                    st.session_state.processing_result = result
+                    st.success("✅ تمت المعالجة بنجاح!")
+                    st.rerun()  # Refresh to show results
+                else:
+                    st.error(f"❌ خطأ في المعالجة: {response.text}")
+                    try:
+                        error_detail = response.json()
+                        st.json(error_detail)
+                    except:
+                        pass
+                    
+            except requests.exceptions.Timeout:
+                st.error("❌ انتهت مهلة الاتصال. الملف كبير جداً أو الخادم بطيء.")
+                st.info("💡 جرب تقليل حجم الفيديو أو زيادة إعدادات Skip Frames في Sidebar")
+            except requests.exceptions.ConnectionError:
+                st.error("❌ لا يمكن الاتصال بالخادم. تأكد من أن Backend يعمل.")
+                st.info("💡 على Streamlit Cloud، انتظر قليلاً ثم أعد تحميل الصفحة")
+            except Exception as e:
+                st.error(f"❌ خطأ: {str(e)}")
+                import traceback
+                with st.expander("🔍 تفاصيل الخطأ"):
+                    st.code(traceback.format_exc())
 
 # Display results if available
 if "processing_result" in st.session_state:
