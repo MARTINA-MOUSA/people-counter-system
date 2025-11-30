@@ -13,7 +13,16 @@ import pandas as pd
 # API Configuration
 import os
 API_PORT = os.getenv("API_PORT", "8000")
-API_BASE_URL = f"http://localhost:{API_PORT}"
+
+# For Streamlit Cloud, use environment variable or default
+# If running locally, use localhost. If on cloud, you may need to set API_BASE_URL
+API_BASE_URL = os.getenv("API_BASE_URL", f"http://localhost:{API_PORT}")
+
+# Check if we're on Streamlit Cloud
+if os.getenv("STREAMLIT_SERVER_PORT"):
+    # On Streamlit Cloud, backend might be on different URL
+    # You can set API_BASE_URL environment variable in Streamlit Cloud settings
+    pass
 
 # Page configuration
 st.set_page_config(
