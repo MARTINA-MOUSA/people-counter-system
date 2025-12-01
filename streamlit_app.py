@@ -23,11 +23,15 @@ def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
     """Check if a port is already in use."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             s.settimeout(1)
-            result = s.connect_ex((host, port))
-            return result == 0
+            try:
+                s.bind((host, port))
+                return False  # Port is available
+            except OSError:
+                return True  # Port is in use
     except Exception:
-        return False
+        return True  # Assume port is in use if check fails
 
 def is_backend_running(port: int) -> bool:
     """Check if backend is already running by making HTTP request."""
@@ -38,9 +42,16 @@ def is_backend_running(port: int) -> bool:
     except Exception:
         return False
 
+def find_free_port(start_port: int = 8000, max_attempts: int = 10) -> int:
+    """Find a free port starting from start_port."""
+    for port in range(start_port, start_port + max_attempts):
+        if not is_port_in_use(port):
+            return port
+    return None
+
 def start_backend():
     """Start FastAPI backend in background thread."""
-    global BACKEND_STARTED
+    global BACKEND_STARTED, BACKEND_PORT
     
     # Use lock to prevent concurrent starts
     with _backend_lock:
@@ -55,14 +66,22 @@ def start_backend():
         
         # Check if port is in use (but not by our backend)
         if is_port_in_use(BACKEND_PORT):
-            print(f"⚠️ Port {BACKEND_PORT} is already in use. Backend may already be running.")
+            print(f"⚠️ Port {BACKEND_PORT} is already in use. Checking if it's our backend...")
             # Try to verify it's our backend
             if is_backend_running(BACKEND_PORT):
                 BACKEND_STARTED = True
+                print(f"✅ Backend API already running on port {BACKEND_PORT}")
                 return
             else:
-                print(f"⚠️ Port {BACKEND_PORT} is in use by another process. Skipping backend start.")
-                return
+                # Port is in use by another process, try to find free port
+                print(f"⚠️ Port {BACKEND_PORT} is in use by another process. Searching for free port...")
+                free_port = find_free_port(BACKEND_PORT + 1, 10)
+                if free_port:
+                    BACKEND_PORT = free_port
+                    print(f"✅ Found free port: {BACKEND_PORT}")
+                else:
+                    print(f"⚠️ Could not find free port. Backend may not start correctly.")
+                    return
         
         try:
             import uvicorn
@@ -71,6 +90,16 @@ def start_backend():
             # Start server in background thread
             def run_server():
                 try:
+                    # Double-check port is available before starting
+                    if is_port_in_use(BACKEND_PORT):
+                        print(f"⚠️ Port {BACKEND_PORT} became unavailable. Backend may already be running.")
+                        if is_backend_running(BACKEND_PORT):
+                            print(f"✅ Backend is already running on port {BACKEND_PORT}")
+                            return
+                        else:
+                            print(f"⚠️ Port {BACKEND_PORT} is in use by another process. Backend will not start.")
+                            return
+                    
                     uvicorn.run(
                         app,
                         host="127.0.0.1",
@@ -78,8 +107,12 @@ def start_backend():
                         log_level="error"  # Reduce logs
                     )
                 except OSError as e:
-                    if "address already in use" in str(e).lower():
-                        print(f"✅ Backend already running on port {BACKEND_PORT}")
+                    if "address already in use" in str(e).lower() or "errno 98" in str(e).lower():
+                        # Port is already in use - check if it's our backend
+                        if is_backend_running(BACKEND_PORT):
+                            print(f"✅ Backend already running on port {BACKEND_PORT}")
+                        else:
+                            print(f"⚠️ Port {BACKEND_PORT} is in use by another process. Backend failed to start.")
                     else:
                         print(f"⚠️ Backend server error: {e}")
                 except Exception as e:
